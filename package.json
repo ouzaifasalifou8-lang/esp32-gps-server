@@ -1,0 +1,8 @@
+{
+  "name": "esp32-gps-relay",
+  "version": "1.0.0",
+  "main": "api/gps.js",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
