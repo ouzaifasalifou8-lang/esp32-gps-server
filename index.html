@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracker Multi-Position</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        #map { height: 100vh; width: 100%; }
+        body { margin: 0; padding: 0; }
+        .info-box {
+            position: absolute; top: 10px; left: 50px; z-index: 1000;
+            background: rgba(255, 255, 255, 0.9); padding: 10px;
+            border-radius: 8px; font-family: sans-serif; font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="info-box" id="status">Calcul de la distance...</div>
+    <div id="map"></div>
+
+    <script>
+        var map = L.map('map').setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        // Icône Voiture (Rouge)
+        var carIcon = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/744/744465.png',
+            iconSize: [40, 40], iconAnchor: [20, 20]
+        });
+        var carMarker = L.marker([0, 0], {icon: carIcon}).addTo(map);
+
+        // Marqueur Téléphone (Point bleu avec halo)
+        var userMarker = L.circleMarker([0, 0], {
+            radius: 9, fillColor: "#007bff", color: "#fff", weight: 3, fillOpacity: 1
+        }).addTo(map);
+
+        var carPos = null;
+        var userPos = null;
+
+        // Fonction pour convertir les coordonnées de ton ESP32
+        function nmeaToDec(val, dir) {
+            if (!val) return 0;
+            let deg = parseInt(val.substring(0, val.indexOf('.') - 2));
+            let min = parseFloat(val.substring(val.indexOf('.') - 2));
+            let res = deg + (min / 60);
+            return (dir === 'S' || dir === 'W') ? -res : res;
+        }
+
+        async function updateData() {
+            try {
+                // 1. Position de la Voiture (ESP32)
+                const res = await fetch('/api/gps');
+                const trame = await res.text();
+                if (trame.includes("$GPRMC")) {
+                    const p = trame.split(",");
+                    if (p[2] === 'A') {
+                        carPos = [nmeaToDec(p[3], p[4]), nmeaToDec(p[5], p[6])];
+                        carMarker.setLatLng(carPos);
+                    }
+                }
+
+                // 2. Position de ton Téléphone
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    userPos = [pos.coords.latitude, pos.coords.longitude];
+                    userMarker.setLatLng(userPos);
+                    
+                    // 3. Ajuster la vue pour voir les DEUX
+                    if (carPos && userPos) {
+                        var bounds = L.latLngBounds([carPos, userPos]);
+                        map.fitBounds(bounds, {padding: [50, 50]});
+                        
+                        // Calculer distance approximative
+                        let dist = map.distance(carPos, userPos).toFixed(0);
+                        document.getElementById('status').innerHTML = "🚗 La voiture est à " + dist + " mètres de vous";
+                    }
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        setInterval(updateData, 5000); // Mise à jour toutes les 5 secondes
+        updateData();
+    </script>
+</body>
+</html>
