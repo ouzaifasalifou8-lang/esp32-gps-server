@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracker Ma Voiture</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        #map { height: 100vh; width: 100%; }
+        body { margin: 0; padding: 0; }
+        .info-box {
+            position: absolute;
+            top: 10px;
+            left: 50px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div class="info-box" id="status">Recherche du signal GPS...</div>
+    <div id="map"></div>
+
+    <script>
+        // 1. Initialisation de la carte (centrée par défaut)
+        var map = L.map('map').setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        // 2. Création de l'icône de VOITURE
+        var carIcon = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/744/744465.png', 
+            iconSize: [45, 45],
+            iconAnchor: [22, 22]
+        });
+
+        var marker = L.marker([0, 0], {icon: carIcon}).addTo(map);
+
+        // 3. Fonction pour convertir les coordonnées GPRMC
+        function nmeaToDecimal(val, dir) {
+            if (!val) return 0;
+            let deg = parseInt(val.substring(0, val.indexOf('.') - 2));
+            let min = parseFloat(val.substring(val.indexOf('.') - 2));
+            let res = deg + (min / 60);
+            return (dir === 'S' || dir === 'W') ? -res : res;
+        }
+
+        // 4. Fonction de mise à jour automatique
+        async function updateMap() {
+            try {
+                // On récupère la trame brute depuis ton API
+                const response = await fetch('/api/gps');
+                const trame = await response.text();
+                
+                if (trame.includes("$GPRMC")) {
+                    const parts = trame.split(",");
+                    
+                    // Vérification si le signal est valide ('A')
+                    if (parts[2] === 'A') {
+                        const lat = nmeaToDecimal(parts[3], parts[4]);
+                        const lon = nmeaToDecimal(parts[5], parts[6]);
+                        
+                        const newPos = [lat, lon];
+                        marker.setLatLng(newPos);
+                        map.setView(newPos, 16); // Zoom sur la voiture
+                        document.getElementById('status').innerHTML = "🚗 Voiture localisée";
+                    } else {
+                        document.getElementById('status').innerHTML = "⚠️ Signal GPS faible (V)";
+                    }
+                }
+            } catch (error) {
+                document.getElementById('status').innerHTML = "❌ Erreur de connexion au serveur";
+            }
+        }
+
+        // Mise à jour toutes les 5 secondes
+        setInterval(updateMap, 5000);
+        updateMap();
+    </script>
+</body>
+  </html>
+  
